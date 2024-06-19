@@ -2,12 +2,15 @@ package plugins
 
 import (
 	"context"
-	"log"
+	"encoding/json"
 	"fmt"
+	"log"
+	"strconv"
+
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
-	"encoding/json"
 )
 
 type CustomSchedulerArgs struct {
@@ -15,7 +18,7 @@ type CustomSchedulerArgs struct {
 }
 
 type CustomScheduler struct {
-	handle 	framework.Handle
+	handle    framework.Handle
 	scoreMode string
 }
 
@@ -24,11 +27,11 @@ var _ framework.ScorePlugin = &CustomScheduler{}
 
 // Name is the name of the plugin used in Registry and configurations.
 const (
-	Name				string = "CustomScheduler"
-	groupNameLabel 		string = "podGroup"
-	minAvailableLabel 	string = "minAvailable"
-	leastMode			string = "Least"
-	mostMode			string = "Most"			
+	Name              string = "CustomScheduler"
+	groupNameLabel    string = "podGroup"
+	minAvailableLabel string = "minAvailable"
+	leastMode         string = "Least"
+	mostMode          string = "Most"
 )
 
 func (cs *CustomScheduler) Name() string {
@@ -67,6 +70,29 @@ func (cs *CustomScheduler) PreFilter(ctx context.Context, state *framework.Cycle
 	// 2. retrieve the pod with the same group label
 	// 3. justify if the pod can be scheduled
 
+	// Extract the label of the pod
+	groupLabel, exists := pod.ObjectMeta.Labels["podGroup"]
+	if !exists {
+		return nil, framework.AsStatus(fmt.Errorf("group label not found on pod %s", pod.Name))
+	}
+
+	// Create a selector from the pod labels
+	selector := labels.SelectorFromSet(labels.Set{"podGroup": groupLabel})
+
+	// Use the lister to fetch pods
+	pods, err := cs.handle.SharedInformerFactory().Core().V1().Pods().Lister().List(selector)
+	if err != nil {
+		return nil, framework.AsStatus(fmt.Errorf("error listing pods with selector %v: %v", selector, err))
+	}
+
+	minAvailable, err := strconv.Atoi(pod.ObjectMeta.Labels["minAvailable"])
+	if err != nil {
+		return nil, framework.AsStatus(fmt.Errorf("group minAvail not found on pod %s", pod.Name))
+	}
+	if len(pods) < minAvailable {
+		return nil, framework.NewStatus(framework.Unschedulable, fmt.Sprintf("Not enough pods in group %s, minimum required is %d", groupLabel, minAvailable))
+	}
+
 	return nil, newStatus
 }
 
@@ -75,7 +101,6 @@ func (cs *CustomScheduler) PreFilterExtensions() framework.PreFilterExtensions {
 	return nil
 }
 
-
 // Score invoked at the score extension point.
 func (cs *CustomScheduler) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
 	log.Printf("Pod %s is in Score phase. Calculate the score of Node %s.", pod.Name, nodeName)
@@ -83,8 +108,21 @@ func (cs *CustomScheduler) Score(ctx context.Context, state *framework.CycleStat
 	// TODO
 	// 1. retrieve the node allocatable memory
 	// 2. return the score based on the scheduler mode
-	
-	return 0, nil
+
+	nodeinfo, err := cs.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+	if err != nil {
+		return 0, framework.AsStatus(fmt.Errorf("nodeInfo not found on node %s", nodeName))
+	}
+
+	allocateableMemory := nodeinfo.Allocatable.Memory
+
+	if cs.scoreMode == leastMode {
+		return -allocateableMemory, nil
+	} else if cs.scoreMode == mostMode {
+		return allocateableMemory, nil
+	} else {
+		return 0, nil
+	}
 }
 
 // ensure the scores are within the valid range
@@ -92,7 +130,27 @@ func (cs *CustomScheduler) NormalizeScore(ctx context.Context, state *framework.
 	// TODO
 	// find the range of the current score and map to the valid range
 
-	return nil
+	minScore := int64(1000000)
+	maxScore := int64(-1000000)
+	for _, score := range scores {
+		if score.Score > maxScore {
+			maxScore = score.Score
+		}
+		if score.Score < minScore {
+			minScore = score.Score
+		}
+	}
+
+	// incase division by zero
+	if minScore == maxScore {
+		return framework.NewStatus(framework.Success)
+	}
+
+	for i := range scores {
+		scores[i].Score = ((scores[i].Score - minScore) * 100) / (maxScore - minScore)
+	}
+
+	return framework.NewStatus(framework.Success)
 }
 
 // ScoreExtensions of the Score plugin.

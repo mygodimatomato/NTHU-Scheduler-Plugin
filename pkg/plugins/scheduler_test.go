@@ -3,21 +3,22 @@ package plugins
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"math"
+	"reflect"
 	"testing"
+
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/kubernetes/pkg/scheduler/framework"
-	clientsetfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/informers"
-	st "k8s.io/kubernetes/pkg/scheduler/testing"
-	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
+	clientsetfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/kubernetes/pkg/scheduler/framework"
 	fakeframework "k8s.io/kubernetes/pkg/scheduler/framework/fake"
-	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultbinder"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort"
+	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
+	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
 func TestCustomScheduler_PreFilter(t *testing.T) {
@@ -27,61 +28,61 @@ func TestCustomScheduler_PreFilter(t *testing.T) {
 		pod   *v1.Pod
 	}
 	tests := []struct {
-		name  string
-		cs    *CustomScheduler
-		args  TestPreFilterInput
-		want  framework.Code
-	}{	
+		name string
+		cs   *CustomScheduler
+		args TestPreFilterInput
+		want framework.Code
+	}{
 		{
-			name:	"pod is accepted",
-			args:	TestPreFilterInput{
-				ctx: context.Background(), 
-				state: nil, 
+			name: "pod is accepted",
+			args: TestPreFilterInput{
+				ctx:   context.Background(),
+				state: nil,
 				pod: &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"podGroup": "g1",
+							"podGroup":     "g1",
 							"minAvailable": "1",
 						},
 					},
-					Spec: v1.PodSpec{Containers: []v1.Container{},},
+					Spec: v1.PodSpec{Containers: []v1.Container{}},
 				},
 			},
-			want:	framework.Success,
+			want: framework.Success,
 		},
 		{
-			name:	"pod is just accepted",
-			args:	TestPreFilterInput{
-				ctx: context.Background(), 
-				state: nil, 
+			name: "pod is just accepted",
+			args: TestPreFilterInput{
+				ctx:   context.Background(),
+				state: nil,
 				pod: &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"podGroup": "g1",
+							"podGroup":     "g1",
 							"minAvailable": "3",
 						},
 					},
-					Spec: v1.PodSpec{Containers: []v1.Container{},},
+					Spec: v1.PodSpec{Containers: []v1.Container{}},
 				},
 			},
-			want:	framework.Success,
+			want: framework.Success,
 		},
 		{
-			name:	"pod is rejected",
-			args:	TestPreFilterInput{
-				ctx: context.Background(), 
-				state: nil, 
+			name: "pod is rejected",
+			args: TestPreFilterInput{
+				ctx:   context.Background(),
+				state: nil,
 				pod: &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"podGroup": "g1",
+							"podGroup":     "g1",
 							"minAvailable": "5",
 						},
 					},
-					Spec: v1.PodSpec{Containers: []v1.Container{},},
+					Spec: v1.PodSpec{Containers: []v1.Container{}},
 				},
 			},
-			want:	framework.Unschedulable,
+			want: framework.Unschedulable,
 		},
 	}
 	for _, tt := range tests {
@@ -107,10 +108,10 @@ func TestCustomScheduler_PreFilter(t *testing.T) {
 			}
 
 			cs := &CustomScheduler{
-				handle: fh,
+				handle:    fh,
 				scoreMode: leastMode,
 			}
-			
+
 			podList := []*v1.Pod{}
 			for i := 0; i < 3; i++ {
 				pod := &v1.Pod{
@@ -133,7 +134,7 @@ func TestCustomScheduler_PreFilter(t *testing.T) {
 			fmt.Printf("finish adding")
 
 			_, status := cs.PreFilter(tt.args.ctx, tt.args.state, tt.args.pod)
-			
+
 			if status.Code() != tt.want {
 				t.Errorf("expected %v, got %v", tt.want, status.Code())
 				return
@@ -144,38 +145,38 @@ func TestCustomScheduler_PreFilter(t *testing.T) {
 
 func TestCustomScheduler_Score(t *testing.T) {
 	type TestScoreInput struct {
-		ctx      	context.Context
-		state    	*framework.CycleState
-		pod      	*v1.Pod
-		nodeNames 	[]string
+		ctx       context.Context
+		state     *framework.CycleState
+		pod       *v1.Pod
+		nodeNames []string
 	}
 	tests := []struct {
-		name  			string
-		nodeInfos    	[]*framework.NodeInfo
-		mode			string
-		args  			TestScoreInput
-		want  			string
+		name      string
+		nodeInfos []*framework.NodeInfo
+		mode      string
+		args      TestScoreInput
+		want      string
 	}{
 		{
-			name: "least mode",
+			name:      "least mode",
 			nodeInfos: []*framework.NodeInfo{makeNodeInfo("m1", 1000, 100), makeNodeInfo("m2", 1000, 200)},
-			mode: "Least",
+			mode:      "Least",
 			args: TestScoreInput{
-				ctx: context.Background(), 
-				state: nil, 
-				pod: &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{},}},
+				ctx:       context.Background(),
+				state:     nil,
+				pod:       &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{}}},
 				nodeNames: []string{"m1", "m2"},
 			},
 			want: "m1",
 		},
 		{
-			name: "most mode",
+			name:      "most mode",
 			nodeInfos: []*framework.NodeInfo{makeNodeInfo("m1", 1000, 100), makeNodeInfo("m2", 1000, 200)},
-			mode: "Most",
+			mode:      "Most",
 			args: TestScoreInput{
-				ctx: context.Background(), 
-				state: nil, 
-				pod: &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{},}},
+				ctx:       context.Background(),
+				state:     nil,
+				pod:       &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{}}},
 				nodeNames: []string{"m1", "m2"},
 			},
 			want: "m2",
@@ -205,7 +206,7 @@ func TestCustomScheduler_Score(t *testing.T) {
 			}
 
 			cs := &CustomScheduler{
-				handle: fh,
+				handle:    fh,
 				scoreMode: tt.mode,
 			}
 
@@ -222,7 +223,7 @@ func TestCustomScheduler_Score(t *testing.T) {
 					bestNode = nodeName
 				}
 			}
-			
+
 			if bestNode != tt.want {
 				t.Errorf("bestNode is = %v, want %v", bestNode, tt.want)
 			}
@@ -232,27 +233,27 @@ func TestCustomScheduler_Score(t *testing.T) {
 
 func TestCustomScheduler_NormalizeScore(t *testing.T) {
 	type TestNormalizeInput struct {
-		ctx context.Context
-		state *framework.CycleState
-		pod *v1.Pod
+		ctx    context.Context
+		state  *framework.CycleState
+		pod    *v1.Pod
 		scores framework.NodeScoreList
 	}
 	tests := []struct {
-		name string
-		cs   *CustomScheduler
-		args TestNormalizeInput
+		name         string
+		cs           *CustomScheduler
+		args         TestNormalizeInput
 		expectedList framework.NodeScoreList
 	}{
 		{
 			name: "scores in range",
-			cs: &CustomScheduler{},
+			cs:   &CustomScheduler{},
 			args: TestNormalizeInput{
-				ctx: context.Background(), 
-				state: nil, 
-				pod: &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{},}},
+				ctx:   context.Background(),
+				state: nil,
+				pod:   &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{}}},
 				scores: []framework.NodeScore{
-					{Name: "m1", Score: 1}, 
-					{Name: "m2", Score: 2}, 
+					{Name: "m1", Score: 1},
+					{Name: "m2", Score: 2},
 					{Name: "m3", Score: 3},
 				},
 			},
@@ -264,14 +265,14 @@ func TestCustomScheduler_NormalizeScore(t *testing.T) {
 		},
 		{
 			name: "scores out of range",
-			cs: &CustomScheduler{},
+			cs:   &CustomScheduler{},
 			args: TestNormalizeInput{
-				ctx: context.Background(), 
-				state: nil, 
-				pod: &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{},}},
+				ctx:   context.Background(),
+				state: nil,
+				pod:   &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{}}},
 				scores: []framework.NodeScore{
-					{Name: "m1", Score: 1000}, 
-					{Name: "m2", Score: 2000}, 
+					{Name: "m1", Score: 1000},
+					{Name: "m2", Score: 2000},
 					{Name: "m3", Score: 3000},
 				},
 			},
@@ -283,14 +284,14 @@ func TestCustomScheduler_NormalizeScore(t *testing.T) {
 		},
 		{
 			name: "negative score",
-			cs: &CustomScheduler{},
+			cs:   &CustomScheduler{},
 			args: TestNormalizeInput{
-				ctx: context.Background(), 
-				state: nil, 
-				pod: &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{},}},
+				ctx:   context.Background(),
+				state: nil,
+				pod:   &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{}}},
 				scores: []framework.NodeScore{
-					{Name: "m1", Score: -1000}, 
-					{Name: "m2", Score: -2000}, 
+					{Name: "m1", Score: -1000},
+					{Name: "m2", Score: -2000},
 					{Name: "m3", Score: -3000},
 				},
 			},

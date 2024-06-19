@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx5
+  labels:
+    podGroup: "B"
+    minAvailable: "3"
+spec:
+  schedulerName: my-scheduler
+  containers:
+  - name: nginx
+    image: nginx:1.14.2
+    ports:
+    - containerPort: 80
+    resources:
+      requests:
+        memory: "500Mi"
+      limits:
+        memory: "500Mi"

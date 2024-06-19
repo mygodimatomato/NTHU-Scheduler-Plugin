@@ -11,4 +11,4 @@ plugins:
 pluginConfig:
 - name: CustomScheduler
   args:
-    mode: Least
+    mode: Most
